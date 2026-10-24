@@ -1,0 +1,19 @@
+{
+  "note": "This is a template. Runtime discovery must verify every capability before use.",
+  "discovery_policy": {
+    "detect_os_runtime_and_resources": true,
+    "discover_installed_skills_and_agents": true,
+    "discover_editors_cli_tools_and_apis": true,
+    "verify_capabilities_before_execution": true,
+    "never_assume_credentials_or_network_access": true,
+    "never_install_or_spend_without_authorization": true
+  },
+  "adapter_examples": [
+    {"capability": "media_inspection", "candidate": "ffprobe", "status": "must-detect"},
+    {"capability": "rendering", "candidate": "ffmpeg or installed editor API", "status": "must-detect"},
+    {"capability": "visual_review", "candidate": "frame extraction and vision-capable tool", "status": "must-detect"},
+    {"capability": "audio_review", "candidate": "audio playback/transcription/analysis tool", "status": "must-detect"},
+    {"capability": "asset_research", "candidate": "authorized search/browser/asset API", "status": "must-detect"},
+    {"capability": "specialist_skills", "candidate": "host-provided skill discovery", "status": "must-detect"}
+  ]
+}
