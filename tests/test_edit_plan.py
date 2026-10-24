@@ -89,6 +89,14 @@ class EditPlanValidationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(json.loads(result.stdout)["status"], "FAIL")
 
+    def test_cli_rejects_nonstandard_nan_json_constant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "plan.json"
+            manifest.write_text('{"schema_version":1,"output":{"path":"out.mp4","width":1080,"height":1920,"fps":NaN},"clips":[{"source":"clip.mp4","start":0,"end":1}]}', encoding="utf-8")
+            result = subprocess.run([sys.executable, str(ROOT / "scripts" / "validate_edit_plan.py"), str(manifest)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(json.loads(result.stdout)["status"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()
