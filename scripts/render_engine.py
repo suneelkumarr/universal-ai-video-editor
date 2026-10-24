@@ -210,6 +210,11 @@ class BaseEditorAdapter:
         raise NotImplementedError
 
 
+def _format_num(val: float) -> str:
+    s = f"{val:.4f}".rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
 class FFmpegAdapter(BaseEditorAdapter):
     """Production FFmpeg rendering adapter using deterministic filter_complex."""
 
@@ -233,7 +238,7 @@ class FFmpegAdapter(BaseEditorAdapter):
         - Accurately trims each clip with -ss and -t.
         - Conforms each video stream to target width, height, and fps with aspect-ratio preservation and padding.
         - Conforms audio stream to 48000Hz stereo, or synthesizes synchronized silence if clip lacks audio.
-        - Concatenates all conformed streams into a unified timeline.
+        - Chains video transitions (xfade) and audio crossfades (acrossfade) or concatenates streams.
         - Encodes with libx264 (yuv420p) + aac + movflags faststart.
         """
         root = (
@@ -337,13 +342,61 @@ class FFmpegAdapter(BaseEditorAdapter):
             filter_parts.append(a_filter)
             concat_a_inputs.append(f"[a{idx}]")
 
-        # Concat filter
-        num_clips = len(clips)
-        concat_stream_order = "".join(
-            f"{concat_v_inputs[i]}{concat_a_inputs[i]}" for i in range(num_clips)
+        # Handle stream assembly: transitions (xfade / acrossfade) or simple concat
+        has_transitions = any(
+            isinstance(c.get("transition"), dict) and c["transition"].get("duration")
+            for c in clips
         )
-        concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1[outv][outa]"
-        filter_parts.append(concat_filter)
+        num_clips = len(clips)
+
+        if not has_transitions or num_clips <= 1:
+            concat_stream_order = "".join(
+                f"{concat_v_inputs[i]}{concat_a_inputs[i]}" for i in range(num_clips)
+            )
+            concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1[outv][outa]"
+            filter_parts.append(concat_filter)
+        else:
+            curr_v = "[v0]"
+            curr_a = "[a0]"
+            curr_dur = float(clips[0]["end"]) - float(clips[0]["start"])
+
+            for i in range(num_clips - 1):
+                next_idx = i + 1
+                next_clip = clips[next_idx]
+                next_v = f"[v{next_idx}]"
+                next_a = f"[a{next_idx}]"
+                next_dur = float(next_clip["end"]) - float(next_clip["start"])
+
+                is_last = (next_idx == num_clips - 1)
+                out_v = "[outv]" if is_last else f"[xv{next_idx}]"
+                out_a = "[outa]" if is_last else f"[xa{next_idx}]"
+
+                clip_i = clips[i]
+                transition = clip_i.get("transition")
+
+                if isinstance(transition, dict) and transition.get("duration"):
+                    t_type = transition.get("type", "fade")
+                    t_dur = float(transition["duration"])
+                    offset = curr_dur - t_dur
+                    dur_str = _format_num(t_dur)
+                    offset_str = _format_num(offset)
+
+                    v_step = f"{curr_v}{next_v}xfade=transition={t_type}:duration={dur_str}:offset={offset_str}{out_v}"
+                    a_step = f"{curr_a}{next_a}acrossfade=d={dur_str}{out_a}"
+                    filter_parts.append(v_step)
+                    filter_parts.append(a_step)
+
+                    curr_dur = curr_dur + next_dur - t_dur
+                else:
+                    v_step = f"{curr_v}{next_v}concat=n=2:v=1:a=0{out_v}"
+                    a_step = f"{curr_a}{next_a}concat=n=2:v=0:a=1{out_a}"
+                    filter_parts.append(v_step)
+                    filter_parts.append(a_step)
+
+                    curr_dur = curr_dur + next_dur
+
+                curr_v = out_v
+                curr_a = out_a
 
         full_filter_complex = ";".join(filter_parts)
         cmd.extend(["-filter_complex", full_filter_complex])
@@ -677,10 +730,17 @@ def render_edit_plan(
             "sources_info": sources_info,
         }
 
-    # Calculate expected timeline duration
+    # Calculate expected timeline duration (subtracting transition overlaps)
     expected_duration = sum(
         float(c["end"]) - float(c["start"]) for c in plan.get("clips", [])
     )
+    total_transition_overlap = sum(
+        float(c["transition"]["duration"])
+        for c in plan.get("clips", [])
+        if isinstance(c.get("transition"), dict) and "duration" in c["transition"]
+    )
+    expected_duration = max(0.0, expected_duration - total_transition_overlap)
+
     out_preset = plan["output"].get("preset")
     if out_preset in ASPECT_PRESETS:
         default_w, default_h = ASPECT_PRESETS[out_preset]

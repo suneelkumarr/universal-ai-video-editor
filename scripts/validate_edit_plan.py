@@ -11,7 +11,14 @@ MAX_DIMENSION = 7680
 MAX_FPS = 120
 ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata"}
 ALLOWED_OUTPUT_KEYS = {"path", "width", "height", "fps", "preset", "framing"}
-ALLOWED_CLIP_KEYS = {"source", "start", "end", "label"}
+ALLOWED_CLIP_KEYS = {"source", "start", "end", "label", "transition"}
+ALLOWED_TRANSITION_KEYS = {"type", "duration"}
+ALLOWED_TRANSITION_TYPES = {
+    "fade", "fadeblack", "fadewhite",
+    "wipeleft", "wiperight", "wipeup", "wipedown",
+    "slideup", "slidedown", "slideleft", "slideright",
+    "circlecrop", "dissolve",
+}
 
 ASPECT_PRESETS = {
     "9:16": (1080, 1920),
@@ -136,6 +143,30 @@ def validate_plan(plan, base_dir=None):
         label = clip.get("label")
         if label is not None and (not isinstance(label, str) or len(label) > 200):
             errors.append(f"{prefix}.label must be a string of at most 200 characters")
+
+        transition = clip.get("transition")
+        if transition is not None:
+            if not isinstance(transition, dict):
+                errors.append(f"{prefix}.transition must be an object")
+            else:
+                extra_trans = sorted(set(transition) - ALLOWED_TRANSITION_KEYS)
+                if extra_trans:
+                    errors.append(f"{prefix}.transition has unknown field(s): " + ", ".join(extra_trans))
+
+                t_type = transition.get("type")
+                if not isinstance(t_type, str) or t_type not in ALLOWED_TRANSITION_TYPES:
+                    errors.append(f"{prefix}.transition.type must be one of: {', '.join(sorted(ALLOWED_TRANSITION_TYPES))}")
+
+                t_dur = transition.get("duration")
+                if not _is_number(t_dur) or t_dur <= 0:
+                    errors.append(f"{prefix}.transition.duration must be a finite number greater than 0")
+                elif _is_number(start) and _is_number(end):
+                    clip_dur = end - start
+                    if t_dur >= clip_dur:
+                        errors.append(f"{prefix}.transition.duration ({t_dur}s) must be strictly less than clip duration ({clip_dur:.2f}s)")
+
+                if index == len(clips) - 1:
+                    errors.append(f"{prefix} cannot have a transition; transitions can only be placed between adjacent clips (not on the last clip)")
 
     if resolved_output is not None:
         for source_path in source_paths:
