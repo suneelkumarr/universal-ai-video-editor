@@ -18,6 +18,10 @@ def _is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _reject_json_constant(value):
+    raise ValueError(f"Non-standard JSON numeric constant is not allowed: {value}")
+
+
 def _canonical_path(value, base_dir):
     path = Path(value).expanduser()
     if not path.is_absolute():
@@ -141,7 +145,7 @@ def main(argv=None):
         size = manifest.stat().st_size
         if size > MAX_MANIFEST_BYTES:
             raise ValueError(f"Manifest exceeds {MAX_MANIFEST_BYTES} bytes")
-        plan = json.loads(manifest.read_text(encoding="utf-8"))
+        plan = json.loads(manifest.read_text(encoding="utf-8"), parse_constant=_reject_json_constant)
     except FileNotFoundError:
         report = {"status": "FAIL", "errors": ["Manifest file not found"]}
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
