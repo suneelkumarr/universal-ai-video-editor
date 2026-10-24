@@ -21,7 +21,7 @@
 | [`SKILL.md`](SKILL.md) | Main agent skill and editing rules |
 | [`scripts/discover_environment.py`](scripts/discover_environment.py) | Detect OS, common editing tools, Python media libraries, and disk space without changing the system |
 | [`scripts/inspect_media.py`](scripts/inspect_media.py) | Media metadata inspection via `ffprobe` |
-| [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |
+| [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |\n| [`scripts/validate_edit_plan.py`](scripts/validate_edit_plan.py) | Validate editor-neutral edit manifests before any render operation |\n| [`examples/basic-edit-plan.json`](examples/basic-edit-plan.json) | Example edit manifest (replace sample paths before use) |
 | [`config/tool-adapters.json`](config/tool-adapters.json) | Tool-discovery configuration template |
 | [`tests/`](tests/) | Unit and regression tests |\n| [`TESTING.md`](TESTING.md) | Mandatory TDD, integration, security, load-test and release-gate policy |
 
@@ -32,8 +32,8 @@
 3. Grant the host access to source media and a real editing/rendering tool.
 4. Discover local capabilities: `python scripts/discover_environment.py --pretty`
 5. Inspect a video: `python scripts/inspect_media.py input.mp4`
-6. After an actual render, check it: `python scripts/validate_render.py output.mp4 1080 1920 30`
-7. Run tests: `python -m unittest discover -s tests -v`\n8. Follow [`TESTING.md`](TESTING.md) for TDD, integration/E2E, authorized security testing, and load testing when the service/worker layer exists.
+6. Validate an edit plan: `python scripts/validate_edit_plan.py examples/basic-edit-plan.json` (the sample validates structurally; it does not render and its source files are placeholders).\n7. After an actual render, check it: `python scripts/validate_render.py output.mp4 1080 1920 30`
+8. Run tests: `python -m unittest discover -s tests -v`\n9. Follow [`TESTING.md`](TESTING.md) for TDD, integration/E2E, authorized security testing, and load testing when the service/worker layer exists.
 
 The validation script's last three arguments are optional expected width, height, and duration (seconds).
 
