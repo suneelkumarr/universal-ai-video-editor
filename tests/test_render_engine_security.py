@@ -86,6 +86,20 @@ class RenderEngineSecurityRegressionTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("exceeds source duration" in error for error in errors))
 
+    def test_duration_qa_rejects_large_error_on_short_video(self):
+        output = self.root / "render.mp4"
+        output.write_bytes(b"render")
+        probe_json = '{"format":{"duration":"1.4","format_name":"mov,mp4"},"streams":[{"codec_type":"video","codec_name":"h264","width":640,"height":360,"avg_frame_rate":"30/1"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2}]}'
+        completed_probe = type("Completed", (), {"returncode": 0, "stdout": probe_json, "stderr": ""})()
+        completed_decode = type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with patch.object(render_engine.shutil, "which", side_effect=["ffprobe", "ffmpeg"]), patch.object(
+            render_engine.subprocess, "run", side_effect=[completed_probe, completed_decode]
+        ):
+            report = render_engine.verify_rendered_video(output, expected_width=640, expected_height=360, expected_duration=1.0)
+        self.assertEqual(report["overall"], "FAIL")
+        duration_check = next(check for check in report["checks"] if check["name"] == "duration")
+        self.assertEqual(duration_check["result"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()
