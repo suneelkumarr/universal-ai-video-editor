@@ -471,7 +471,7 @@ def verify_rendered_video(
         })
 
     if expected_duration is not None:
-        tolerance = max(0.5, expected_duration * 0.05)
+        tolerance = max(0.1, expected_duration * 0.02)
         is_pass = (
             actual_dur is not None and abs(actual_dur - expected_duration) <= tolerance
         )
