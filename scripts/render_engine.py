@@ -27,16 +27,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT_DIR / "scripts"))
 
-try:
-    from validate_edit_plan import validate_plan, _canonical_path
-except ImportError:
-    # Fallback if imported from another path
-    def _canonical_path(value: str, base_dir: Path) -> Path:
-        p = Path(value).expanduser()
-        return (base_dir / p).resolve(strict=False) if not p.is_absolute() else p.resolve(strict=False)
-
-    def validate_plan(plan: dict, base_dir: Optional[Path] = None) -> dict:
-        return {"status": "PASS", "errors": []}
+from validate_edit_plan import validate_plan, _canonical_path
 
 
 def inspect_media_file(file_path: Path) -> dict[str, Any]:
@@ -70,11 +61,11 @@ def inspect_media_file(file_path: Path) -> dict[str, Any]:
         return {
             "path": str(resolved),
             "exists": True,
-            "has_video": True,  # assumption
-            "has_audio": True,
+            "has_video": False,
+            "has_audio": False,
             "duration": None,
             "bytes": size_bytes,
-            "note": "ffprobe not found",
+            "error": "ffprobe not found; source media cannot be safely verified",
         }
 
     try:
@@ -186,8 +177,8 @@ def inspect_source_clips(
                 errors.append(
                     f"clips[{idx}].start ({start}s) is >= source duration ({duration:.2f}s)"
                 )
-            elif end > duration + 1.0:
-                # Add tolerance for small container duration rounding, but error on out of bounds
+            elif end > duration + 0.05:
+                # Allow only a small container-duration rounding tolerance (50 ms).
                 errors.append(
                     f"clips[{idx}].end ({end}s) exceeds source duration ({duration:.2f}s)"
                 )
@@ -573,6 +564,20 @@ def render_edit_plan(
         else Path.cwd().resolve()
     )
 
+    # Reject invalid timeouts early; subprocess.run can raise unexpected errors for NaN/inf.
+    if (
+        not isinstance(timeout_seconds, (int, float))
+        or isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+        or timeout_seconds > 86400
+    ):
+        return {
+            "status": "FAIL",
+            "stage": "configuration_validation",
+            "errors": ["timeout_seconds must be a finite number greater than 0 and at most 86400"],
+        }
+
     # Step 1: Validate plan
     plan_validation = validate_plan(plan, base_dir=root)
     if plan_validation["status"] != "PASS":
@@ -595,11 +600,33 @@ def render_edit_plan(
             "sources_info": sources_info,
         }
 
-    # Resolve output path
+    # Resolve output path and protect every input source from accidental overwrite.
     if custom_output:
         out_path = Path(custom_output).expanduser().resolve(strict=False)
     else:
         out_path = _canonical_path(plan["output"]["path"], root)
+
+    if out_path.exists() and out_path.is_dir():
+        return {
+            "status": "FAIL",
+            "stage": "output_validation",
+            "errors": ["Output path points to a directory"],
+        }
+
+    for index, clip in enumerate(plan["clips"]):
+        source_path = _canonical_path(clip["source"], root)
+        aliases_source = out_path == source_path
+        if not aliases_source and out_path.exists() and source_path.exists():
+            try:
+                aliases_source = os.path.samefile(out_path, source_path)
+            except OSError:
+                aliases_source = False
+        if aliases_source:
+            return {
+                "status": "FAIL",
+                "stage": "output_validation",
+                "errors": [f"Output path would overwrite source clip at clips[{index}]; choose a different output path"],
+            }
 
     # Calculate expected timeline duration
     expected_duration = sum(
