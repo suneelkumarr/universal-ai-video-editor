@@ -189,7 +189,11 @@ class TestSubtitlesEngine(unittest.TestCase):
         }
 
         report = render_engine.render_edit_plan(plan, base_dir=self.tmp)
-        self.assertEqual(report["status"], "PASS")
+        self.assertEqual(
+            report["status"],
+            "PASS",
+            msg=f"Render report errors: {report.get('errors')}, render_report: {report.get('render_report')}",
+        )
         self.assertTrue(out.is_file())
         self.assertEqual(report["qa_report"]["overall"], "PASS")
         self.assertAlmostEqual(report["actual_duration_seconds"], 3.0, delta=0.08)

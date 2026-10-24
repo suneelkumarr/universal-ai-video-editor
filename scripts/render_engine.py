@@ -231,6 +231,43 @@ class BaseEditorAdapter:
         raise NotImplementedError
 
 
+def _find_default_font_file() -> Optional[str]:
+    """Find an available system TrueType or OpenType font for FFmpeg drawtext."""
+    candidates = []
+    # Windows
+    sys_root = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or "C:\\Windows"
+    candidates.extend([
+        os.path.join(sys_root, "Fonts", "arial.ttf"),
+        os.path.join(sys_root, "Fonts", "Arial.ttf"),
+        os.path.join(sys_root, "Fonts", "segoeui.ttf"),
+        os.path.join(sys_root, "Fonts", "tahoma.ttf"),
+        os.path.join(sys_root, "Fonts", "calibri.ttf"),
+    ])
+    # macOS
+    candidates.extend([
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/SFNSText.ttf",
+        "/System/Library/Fonts/Geneva.dfont",
+        "/System/Library/Fonts/Menlo.ttc",
+        "/Library/Fonts/Arial.ttf",
+    ])
+    # Linux
+    candidates.extend([
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/arial.ttf",
+    ])
+    for c in candidates:
+        if os.path.isfile(c):
+            clean_path = c.replace("\\", "/")
+            escaped_path = clean_path.replace(":", "\\:")
+            return escaped_path
+    return None
+
+
 def _escape_drawtext_text(text: str) -> str:
     text = text.replace("\\", "\\\\")
     text = text.replace("'", "\u2019")
@@ -440,6 +477,7 @@ class FFmpegAdapter(BaseEditorAdapter):
 
         # Burn in subtitles via drawtext if provided
         if subtitles:
+            default_font = _find_default_font_file()
             v_curr = assembled_v
             for s_idx, sub in enumerate(subtitles):
                 is_last_sub = (s_idx == len(subtitles) - 1)
@@ -462,6 +500,12 @@ class FFmpegAdapter(BaseEditorAdapter):
                     f"fontsize={font_size}",
                     f"fontcolor={font_color}",
                 ]
+                custom_font = style.get("font_file")
+                font_to_use = custom_font or default_font
+                if font_to_use:
+                    escaped_font = str(font_to_use).replace("\\", "/").replace(":", "\\:")
+                    d_parts.append(f"fontfile='{escaped_font}'")
+
                 if box:
                     d_parts.extend(["box=1", f"boxcolor={box_color}", "boxborderw=6"])
 

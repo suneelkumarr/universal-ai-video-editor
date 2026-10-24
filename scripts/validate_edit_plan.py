@@ -21,7 +21,7 @@ ALLOWED_TRANSITION_TYPES = {
 }
 
 ALLOWED_SUBTITLE_KEYS = {"start", "end", "text", "style"}
-ALLOWED_SUBTITLE_STYLE_KEYS = {"font_size", "font_color", "box", "box_color", "position"}
+ALLOWED_SUBTITLE_STYLE_KEYS = {"font_size", "font_color", "box", "box_color", "position", "font_file"}
 ALLOWED_SUBTITLE_POSITIONS = {"bottom", "center", "top"}
 
 ALLOWED_AUDIO_TRACK_KEYS = {"source", "start", "volume", "loop", "ducking"}
