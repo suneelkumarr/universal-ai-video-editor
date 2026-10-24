@@ -23,7 +23,7 @@
 | [`scripts/inspect_media.py`](scripts/inspect_media.py) | Media metadata inspection via `ffprobe` |
 | [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |
 | [`config/tool-adapters.json`](config/tool-adapters.json) | Tool-discovery configuration template |
-| [`tests/`](tests/) | Basic CLI regression tests |
+| [`tests/`](tests/) | Unit and regression tests |\n| [`TESTING.md`](TESTING.md) | Mandatory TDD, integration, security, load-test and release-gate policy |
 
 ## Quick start
 
@@ -33,7 +33,7 @@
 4. Discover local capabilities: `python scripts/discover_environment.py --pretty`
 5. Inspect a video: `python scripts/inspect_media.py input.mp4`
 6. After an actual render, check it: `python scripts/validate_render.py output.mp4 1080 1920 30`
-7. Run tests: `python -m unittest discover -s tests -v`
+7. Run tests: `python -m unittest discover -s tests -v`\n8. Follow [`TESTING.md`](TESTING.md) for TDD, integration/E2E, authorized security testing, and load testing when the service/worker layer exists.
 
 The validation script's last three arguments are optional expected width, height, and duration (seconds).
 
@@ -47,7 +47,7 @@ The instructions are portable; actual editing depends on the current host's tool
 - [x] Non-invasive local environment discovery
 - [x] Media inspection and basic rendered-file checks
 - [x] CI tests on macOS, Windows and Linux (configured; results depend on CI runs)
-- [ ] Actual editor integrations and tool adapters
+- [ ] Expand TDD, integration/E2E and security gates beyond current CLI coverage\n- [ ] Actual editor integrations and tool adapters
 - [ ] Timeline project generation and rendering pipeline
 - [ ] Authorized stock-asset search and license tracking
 - [ ] Video/audio creative review and automatic repair
