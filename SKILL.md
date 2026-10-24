@@ -132,6 +132,12 @@ Inspect frames throughout the video and around important cuts. Listen to audio o
 ### 6. Deliver
 Provide the real output path/link when supported, export settings, concise edit summary, resource/license notes, and a plain-language QA report. If only a plan or script was produced, say so. Never label an unrendered plan as a finished video.
 
+## Mandatory testing and adversarial review
+
+Follow [TESTING.md](TESTING.md) when available. For every code change, use test-driven development: write a test first, observe the expected failure, implement the smallest fix, verify it passes, refactor, and run regressions. Include unit tests, integration tests for real boundaries, and end-to-end tests for complete workflows. Test malformed inputs, hostile filenames/metadata, path traversal, command injection, timeouts, cancellation, resource exhaustion, cleanup, and secret leakage. Perform penetration testing only against systems and environments explicitly authorized for testing.
+
+Before a release, review CI results across supported operating systems, run static security/dependency checks, document failures and skipped tests, and verify actual rendered outputs. Once a job API/worker system exists, run controlled load, stress, soak, and recovery tests with synthetic media; report workload, environment, latency, errors, CPU/RAM/disk, and limitations. Do not pretend a concurrency simulation is equivalent to real users. A critical security finding, data-loss issue, or unsafe command-execution path blocks release until fixed or explicitly risk-accepted with documented mitigation.
+
 ## Privacy and approval boundaries
 
 Use only media and external services needed for the task. Before sending private user media to an external AI/API, verify that the service is available, authorized, and appropriate. Ask before paid usage, public posting, destructive overwrites, or other irreversible/external actions. Do not expose credentials or secrets. Never fabricate tool results, sources, licenses, tests, or rendered files.
