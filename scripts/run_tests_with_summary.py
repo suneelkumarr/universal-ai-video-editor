@@ -26,12 +26,16 @@ def main():
         for test, tb in result.failures:
             lines.append(f"- **{test}**")
             lines.append(f"```\n{tb}\n```")
+            encoded_tb = tb.strip().replace("\r", "").replace("\n", "%0A")
+            print(f"::error title={test}::{encoded_tb}")
 
     if result.errors:
         lines.append("#### Errors:")
         for test, tb in result.errors:
             lines.append(f"- **{test}**")
             lines.append(f"```\n{tb}\n```")
+            encoded_tb = tb.strip().replace("\r", "").replace("\n", "%0A")
+            print(f"::error title={test}::{encoded_tb}")
 
     if not result.wasSuccessful():
         summary_content = "\n".join(lines)
