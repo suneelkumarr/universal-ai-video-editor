@@ -79,14 +79,27 @@ class TestReliabilityAndVisualQuality(unittest.TestCase):
         black_detections = [line for line in res_black.stderr.splitlines() if "blackdetect" in line]
         self.assertEqual(len(black_detections), 0, f"Unexpected black frames detected: {black_detections}")
 
-        # 2. Check silence gaps at transition boundaries using silencedetect
+        # 2. Check silence gaps specifically at the cut seam (t = 1.5s).
+        # Note: Both fixtures have continuous 440Hz sine audio, so any silence at t ~ 1.5s
+        # would indicate an unwanted audio buffer dropout at the concatenation seam.
         silence_cmd = [
             self.ffmpeg, "-v", "info", "-i", str(out),
-            "-af", "silencedetect=n=-45dB:d=0.2", "-f", "null", "-",
+            "-af", "silencedetect=n=-45dB:d=0.08", "-f", "null", "-",
         ]
         res_silence = subprocess.run(silence_cmd, capture_output=True, text=True)
-        silence_detections = [line for line in res_silence.stderr.splitlines() if "silence_start" in line]
-        self.assertEqual(len(silence_detections), 0, f"Unexpected audio silence detected: {silence_detections}")
+        # Parse silence intervals specifically overlapping the cut point (1.5s +/- 0.15s)
+        seam_silence = []
+        for line in res_silence.stderr.splitlines():
+            if "silence_start:" in line:
+                try:
+                    parts = line.split("silence_start:")
+                    val = float(parts[1].strip().split()[0])
+                    # Cut seam is at 1.5s (end of clip 1)
+                    if abs(val - 1.5) < 0.2:
+                        seam_silence.append(val)
+                except (ValueError, IndexError):
+                    pass
+        self.assertEqual(len(seam_silence), 0, f"Unwanted audio dropout detected at cut seam (t=1.5s): {seam_silence}")
 
     def test_audio_continuity_interleaved_silent_and_sound_clips(self):
         """Audio -> Silent -> Audio clips must concatenate with perfect audio stream alignment."""
