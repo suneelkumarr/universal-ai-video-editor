@@ -568,9 +568,9 @@ def render_edit_plan(
     if (
         not isinstance(timeout_seconds, (int, float))
         or isinstance(timeout_seconds, bool)
-        or not math.isfinite(timeout_seconds)
         or timeout_seconds <= 0
         or timeout_seconds > 86400
+        or not math.isfinite(timeout_seconds)
     ):
         return {
             "status": "FAIL",
