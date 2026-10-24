@@ -63,6 +63,13 @@ class RenderEngineSecurityRegressionTests(unittest.TestCase):
         self.assertEqual(report["stage"], "configuration_validation")
         self.assertFalse(adapter.called)
 
+    def test_unrepresentably_large_timeout_is_rejected_cleanly(self):
+        report = render_engine.render_edit_plan(
+            self.plan, base_dir=self.root, dry_run=True, timeout_seconds=10**1000
+        )
+        self.assertEqual(report["status"], "FAIL")
+        self.assertEqual(report["stage"], "configuration_validation")
+
     def test_missing_ffprobe_is_not_reported_as_verified_video_audio(self):
         with patch.object(render_engine.shutil, "which", return_value=None):
             info = render_engine.inspect_media_file(self.source)
