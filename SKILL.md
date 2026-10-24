@@ -44,7 +44,7 @@ This is a portable skill specification, not a universal runtime by itself. A hos
 
 ## Automatic environment discovery
 
-At the start of each task, inspect the current runtime using the host's documented mechanisms. Discover, when available:
+At the start of each task, inspect the current runtime using the host's documented mechanisms. If this repository's helper is available, run `python scripts/discover_environment.py --pretty` as a starting point, then use the host's own mechanisms to discover AI skills, connected apps, permissions, and APIs. Discover, when available:
 - Operating system, architecture, local versus cloud execution, disk space, memory, GPU/accelerator, and runtime limits.
 - Installed media tools and versions, including FFmpeg/ffprobe, image/audio tools, and supported video editors.
 - Editor automation, scripting interfaces, plugins, command-line tools, APIs, and connected apps.
