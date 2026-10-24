@@ -10,8 +10,16 @@ MAX_CLIPS = 500
 MAX_DIMENSION = 7680
 MAX_FPS = 120
 ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata"}
-ALLOWED_OUTPUT_KEYS = {"path", "width", "height", "fps"}
+ALLOWED_OUTPUT_KEYS = {"path", "width", "height", "fps", "preset", "framing"}
 ALLOWED_CLIP_KEYS = {"source", "start", "end", "label"}
+
+ASPECT_PRESETS = {
+    "9:16": (1080, 1920),
+    "16:9": (1920, 1080),
+    "1:1": (1080, 1080),
+    "4:5": (1080, 1350),
+}
+ALLOWED_FRAMING_MODES = {"letterbox", "blur_fill", "crop_fill"}
 
 
 def _is_number(value):
@@ -50,6 +58,24 @@ def validate_plan(plan, base_dir=None):
     extra_output = sorted(set(output) - ALLOWED_OUTPUT_KEYS)
     if extra_output:
         errors.append("Unknown output field(s): " + ", ".join(extra_output))
+
+    preset = output.get("preset")
+    if preset is not None:
+        if not isinstance(preset, str) or preset not in ASPECT_PRESETS:
+            errors.append(f"output.preset must be one of: {', '.join(sorted(ASPECT_PRESETS))}")
+        else:
+            default_w, default_h = ASPECT_PRESETS[preset]
+            if output.get("width") is None:
+                output["width"] = default_w
+            if output.get("height") is None:
+                output["height"] = default_h
+
+    framing = output.get("framing")
+    if framing is not None:
+        if not isinstance(framing, str) or framing not in ALLOWED_FRAMING_MODES:
+            errors.append(f"output.framing must be one of: {', '.join(sorted(ALLOWED_FRAMING_MODES))}")
+    else:
+        framing = "letterbox"
 
     output_path = output.get("path")
     resolved_output = None
@@ -130,6 +156,8 @@ def validate_plan(plan, base_dir=None):
             "width": output.get("width"),
             "height": output.get("height"),
             "fps": fps,
+            "preset": preset,
+            "framing": framing if framing in ALLOWED_FRAMING_MODES else "letterbox",
         },
         "errors": errors,
     }

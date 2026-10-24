@@ -27,7 +27,12 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT_DIR / "scripts"))
 
-from validate_edit_plan import validate_plan, _canonical_path
+from validate_edit_plan import (
+    validate_plan,
+    _canonical_path,
+    ASPECT_PRESETS,
+    ALLOWED_FRAMING_MODES,
+)
 
 
 def inspect_media_file(file_path: Path) -> dict[str, Any]:
@@ -237,9 +242,16 @@ class FFmpegAdapter(BaseEditorAdapter):
             else Path.cwd().resolve()
         )
         out_cfg = plan["output"]
-        target_w = out_cfg["width"]
-        target_h = out_cfg["height"]
-        target_fps = out_cfg["fps"]
+        preset = out_cfg.get("preset")
+        if preset in ASPECT_PRESETS:
+            default_w, default_h = ASPECT_PRESETS[preset]
+            target_w = out_cfg.get("width") or default_w
+            target_h = out_cfg.get("height") or default_h
+        else:
+            target_w = out_cfg.get("width", 1920)
+            target_h = out_cfg.get("height", 1080)
+        target_fps = out_cfg.get("fps", 30)
+        framing = out_cfg.get("framing", "letterbox")
         clips = plan["clips"]
 
         cmd: list[str] = [self.ffmpeg_bin or "ffmpeg", "-y", "-v", "error", "-stats"]
@@ -281,14 +293,34 @@ class FFmpegAdapter(BaseEditorAdapter):
 
             dur_str = f"{duration:.4f}".rstrip("0").rstrip(".")
 
-            # Video conforming filter: scale, pad, set fps & sar, and frame-accurate trim
-            v_filter = (
-                f"[{idx}:v]fps={target_fps},"
-                f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,"
-                f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2,"
-                f"setsar=1,"
-                f"trim=duration={dur_str},setpts=PTS-STARTPTS[v{idx}]"
-            )
+            # Video conforming filter: apply framing mode (blur_fill, crop_fill, or letterbox)
+            if framing == "blur_fill":
+                v_filter = (
+                    f"[{idx}:v]split[bg_in_{idx}][fg_in_{idx}];"
+                    f"[bg_in_{idx}]scale=w={target_w}:h={target_h}:force_original_aspect_ratio=increase,"
+                    f"crop=w={target_w}:h={target_h},"
+                    f"boxblur=25:5[bg_{idx}];"
+                    f"[fg_in_{idx}]scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease[fg_{idx}];"
+                    f"[bg_{idx}][fg_{idx}]overlay=(W-w)/2:(H-h)/2,setsar=1,fps={target_fps},"
+                    f"trim=duration={dur_str},setpts=PTS-STARTPTS[v{idx}]"
+                )
+            elif framing == "crop_fill":
+                v_filter = (
+                    f"[{idx}:v]fps={target_fps},"
+                    f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=increase,"
+                    f"crop=w={target_w}:h={target_h},"
+                    f"setsar=1,"
+                    f"trim=duration={dur_str},setpts=PTS-STARTPTS[v{idx}]"
+                )
+            else:
+                # "letterbox" (default: scale down with padding)
+                v_filter = (
+                    f"[{idx}:v]fps={target_fps},"
+                    f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,"
+                    f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2,"
+                    f"setsar=1,"
+                    f"trim=duration={dur_str},setpts=PTS-STARTPTS[v{idx}]"
+                )
             filter_parts.append(v_filter)
             concat_v_inputs.append(f"[v{idx}]")
 
@@ -649,8 +681,14 @@ def render_edit_plan(
     expected_duration = sum(
         float(c["end"]) - float(c["start"]) for c in plan.get("clips", [])
     )
-    expected_w = plan["output"].get("width")
-    expected_h = plan["output"].get("height")
+    out_preset = plan["output"].get("preset")
+    if out_preset in ASPECT_PRESETS:
+        default_w, default_h = ASPECT_PRESETS[out_preset]
+        expected_w = plan["output"].get("width") or default_w
+        expected_h = plan["output"].get("height") or default_h
+    else:
+        expected_w = plan["output"].get("width")
+        expected_h = plan["output"].get("height")
 
     if dry_run:
         return {
