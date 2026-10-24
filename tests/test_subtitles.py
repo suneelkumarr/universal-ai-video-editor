@@ -159,8 +159,42 @@ class TestSubtitlesEngine(unittest.TestCase):
             self.assertIn("drawtext=", fc)
             self.assertIn("AI Auto Caption", fc)
             self.assertIn("between(t,0.5,2.5)", fc)
-        else:
+        elif adapter.has_filter("subtitles"):
             self.assertIn("subtitles=", fc)
+        else:
+            self.assertIn("null", fc)
+
+    def test_command_builder_simulated_subtitles_fallback(self):
+        """When drawtext is absent but subtitles filter exists, SRT burning must be used."""
+        adapter = render_engine.FFmpegAdapter()
+        adapter.has_filter = lambda f: f == "subtitles"
+        c1 = (self.tmp / "c1.mp4").resolve()
+        plan = {
+            "schema_version": 1,
+            "output": {"path": str(self.tmp / "out.mp4"), "width": 640, "height": 360, "fps": 30},
+            "clips": [{"source": str(c1), "start": 0.0, "end": 3.0}],
+            "subtitles": [{"start": 0.5, "end": 2.5, "text": "SRT fallback"}],
+        }
+        sources_info = {str(c1): {"has_video": True, "has_audio": True, "duration": 5.0}}
+        cmd = adapter.build_ffmpeg_command(plan, sources_info, (self.tmp / "out.mp4").resolve())
+        fc = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("subtitles=", fc)
+
+    def test_command_builder_simulated_no_subtitles_filters(self):
+        """When neither drawtext nor subtitles exists, stream must pass through cleanly."""
+        adapter = render_engine.FFmpegAdapter()
+        adapter.has_filter = lambda f: False
+        c1 = (self.tmp / "c1.mp4").resolve()
+        plan = {
+            "schema_version": 1,
+            "output": {"path": str(self.tmp / "out.mp4"), "width": 640, "height": 360, "fps": 30},
+            "clips": [{"source": str(c1), "start": 0.0, "end": 3.0}],
+            "subtitles": [{"start": 0.5, "end": 2.5, "text": "Passthrough"}],
+        }
+        sources_info = {str(c1): {"has_video": True, "has_audio": True, "duration": 5.0}}
+        cmd = adapter.build_ffmpeg_command(plan, sources_info, (self.tmp / "out.mp4").resolve())
+        fc = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("null[outv]", fc)
 
     # =========================================================================
     # 3. Real Render Test with Subtitles
