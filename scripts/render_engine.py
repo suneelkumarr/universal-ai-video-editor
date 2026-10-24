@@ -252,7 +252,19 @@ class FFmpegAdapter(BaseEditorAdapter):
         for idx, clip in enumerate(clips):
             resolved_source = _canonical_path(clip["source"], root)
             source_key = str(resolved_source)
-            info = sources_info.get(source_key, {})
+            info = sources_info.get(source_key)
+            if info is None:
+                info = sources_info.get(str(clip.get("source")))
+            if info is None:
+                for k, v in sources_info.items():
+                    try:
+                        if _canonical_path(k, root) == resolved_source:
+                            info = v
+                            break
+                    except Exception:
+                        pass
+            if info is None:
+                info = {}
 
             start = float(clip["start"])
             duration = float(clip["end"]) - start

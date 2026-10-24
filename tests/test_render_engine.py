@@ -58,18 +58,20 @@ class TestRenderEngine(unittest.TestCase):
     def test_ffmpeg_command_builder(self):
         """Verify FFmpegAdapter builds safe, non-shell arguments with scaling, padding, and silence."""
         adapter = render_engine.FFmpegAdapter()
-        clip1 = {"source": str(self.tmp / "c1.mp4"), "start": 1.0, "end": 3.5}
-        clip2 = {"source": str(self.tmp / "c2.mp4"), "start": 0.0, "end": 2.0}
+        clip1_path = (self.tmp / "c1.mp4").resolve()
+        clip2_path = (self.tmp / "c2.mp4").resolve()
+        clip1 = {"source": str(clip1_path), "start": 1.0, "end": 3.5}
+        clip2 = {"source": str(clip2_path), "start": 0.0, "end": 2.0}
         plan = {
             "schema_version": 1,
-            "output": {"path": str(self.tmp / "out.mp4"), "width": 1280, "height": 720, "fps": 30},
+            "output": {"path": str((self.tmp / "out.mp4").resolve()), "width": 1280, "height": 720, "fps": 30},
             "clips": [clip1, clip2],
         }
         sources_info = {
             clip1["source"]: {"has_video": True, "has_audio": True, "duration": 10.0},
             clip2["source"]: {"has_video": True, "has_audio": False, "duration": 5.0},
         }
-        cmd = adapter.build_ffmpeg_command(plan, sources_info, self.tmp / "out.mp4")
+        cmd = adapter.build_ffmpeg_command(plan, sources_info, (self.tmp / "out.mp4").resolve())
         self.assertIsInstance(cmd, list)
         self.assertTrue(all(isinstance(arg, str) for arg in cmd))
         self.assertIn("-filter_complex", cmd)
