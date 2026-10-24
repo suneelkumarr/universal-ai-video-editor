@@ -17,6 +17,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(report["schema_version"], "1.0")
         self.assertIn("os", report["runtime"])
         self.assertIn("ffmpeg", report["tools"])
+        self.assertIn("davinci_resolve", report["gui_editors"])
         self.assertEqual(report["limits"]["credentials"], "not_inspected")
 
     def test_pretty_output_is_valid(self):
