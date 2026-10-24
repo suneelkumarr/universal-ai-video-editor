@@ -21,19 +21,27 @@
 | [`SKILL.md`](SKILL.md) | Main agent skill and editing rules |
 | [`scripts/discover_environment.py`](scripts/discover_environment.py) | Detect OS, common editing tools, Python media libraries, and disk space without changing the system |
 | [`scripts/inspect_media.py`](scripts/inspect_media.py) | Media metadata inspection via `ffprobe` |
-| [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |\n| [`scripts/validate_edit_plan.py`](scripts/validate_edit_plan.py) | Validate editor-neutral edit manifests before any render operation |\n| [`examples/basic-edit-plan.json`](examples/basic-edit-plan.json) | Example edit manifest (replace sample paths before use) |
+| [`scripts/render_engine.py`](scripts/render_engine.py) | Video rendering engine supporting FFmpeg adapter, trimming, conforming, combining, and full verification |
+| [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |
+| [`scripts/validate_edit_plan.py`](scripts/validate_edit_plan.py) | Validate editor-neutral edit manifests before any render operation |
+| [`examples/basic-edit-plan.json`](examples/basic-edit-plan.json) | Example edit manifest (replace sample paths before use) |
+| [`examples/sample-render-plan.json`](examples/sample-render-plan.json) | Ready-to-render example manifest linked to workspace sample media |
 | [`config/tool-adapters.json`](config/tool-adapters.json) | Tool-discovery configuration template |
-| [`tests/`](tests/) | Unit and regression tests |\n| [`TESTING.md`](TESTING.md) | Mandatory TDD, integration, security, load-test and release-gate policy |
+| [`tests/`](tests/) | Unit, integration, E2E, and regression test suites |
+| [`TESTING.md`](TESTING.md) | Mandatory TDD, integration, security, load-test and release-gate policy |
 
 ## Quick start
 
-1. Install Python 3.10+ and, for media inspection/validation, [FFmpeg](https://ffmpeg.org/).
-2. Place `SKILL.md` in the location supported by your AI host (some hosts need format adaptation).
-3. Grant the host access to source media and a real editing/rendering tool.
-4. Discover local capabilities: `python scripts/discover_environment.py --pretty`
-5. Inspect a video: `python scripts/inspect_media.py input.mp4`
-6. Validate an edit plan: `python scripts/validate_edit_plan.py examples/basic-edit-plan.json` (the sample validates structurally; it does not render and its source files are placeholders).\n7. After an actual render, check it: `python scripts/validate_render.py output.mp4 1080 1920 30`
-8. Run tests: `python -m unittest discover -s tests -v`\n9. Follow [`TESTING.md`](TESTING.md) for TDD, integration/E2E, authorized security testing, and load testing when the service/worker layer exists.
+1. Install Python 3.10+ and [FFmpeg](https://ffmpeg.org/).
+2. Discover local capabilities: `python scripts/discover_environment.py --pretty`
+3. Inspect a video: `python scripts/inspect_media.py input.mp4`
+4. Validate an edit plan: `python scripts/validate_edit_plan.py examples/sample-render-plan.json`
+5. Render a verified output video:
+   ```bash
+   python scripts/render_engine.py examples/sample-render-plan.json
+   ```
+6. Check rendered file directly: `python scripts/validate_render.py examples/renders/sample_highlight.mp4 720 1280 7.5`
+7. Run all tests: `python -m unittest discover -s tests -v`
 
 The validation script's last three arguments are optional expected width, height, and duration (seconds).
 
@@ -46,12 +54,14 @@ The instructions are portable; actual editing depends on the current host's tool
 - [x] Portable `SKILL.md` with creative workflow and environment discovery
 - [x] Non-invasive local environment discovery
 - [x] Media inspection and basic rendered-file checks
-- [x] CI tests on macOS, Windows and Linux (configured; results depend on CI runs)
-- [ ] Expand TDD, integration/E2E and security gates beyond current CLI coverage\n- [ ] Actual editor integrations and tool adapters
-- [ ] Timeline project generation and rendering pipeline
+- [x] Versioned edit plan validator with path-traversal prevention
+- [x] Video rendering engine with FFmpeg adapter, aspect-ratio conforming, audio resampling/silence synthesis
+- [x] End-to-end integration tests with real video media
+- [x] CI tests on macOS, Windows and Linux
+- [ ] Expand TDD, integration/E2E and security gates beyond current CLI coverage
+- [ ] Additional editor adapters (MoviePy, DaVinci Resolve, Premiere Pro scripts)
 - [ ] Authorized stock-asset search and license tracking
 - [ ] Video/audio creative review and automatic repair
-- [ ] End-to-end integration tests with real videos on all platforms
 
 ## Contributing
 

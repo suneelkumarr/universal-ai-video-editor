@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "output": {
+    "path": "renders/sample_highlight.mp4",
+    "width": 720,
+    "height": 1280,
+    "fps": 30
+  },
+  "clips": [
+    {
+      "source": "../WhatsApp Video 2026-10-16 at 21.08.30.mp4",
+      "start": 1.0,
+      "end": 4.5,
+      "label": "Opening highlight (3.5s)"
+    },
+    {
+      "source": "../WhatsApp Video 2026-10-16 at 21.08.30.mp4",
+      "start": 10.0,
+      "end": 14.0,
+      "label": "Action highlight (4.0s)"
+    }
+  ],
+  "metadata": {
+    "title": "Sample Highlight Reel",
+    "purpose": "Demonstrates real video trimming, aspect conforming, and concatenation from real media"
+  }
+}

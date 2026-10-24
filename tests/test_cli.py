@@ -35,6 +35,12 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(json.loads(result.stdout)["overall"], "FAIL")
 
+    def test_render_engine_missing_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.call("render_engine.py", Path(directory) / "missing_plan.json")
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(json.loads(result.stdout)["status"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()
