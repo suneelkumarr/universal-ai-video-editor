@@ -210,6 +210,14 @@ class BaseEditorAdapter:
         raise NotImplementedError
 
 
+def _escape_drawtext_text(text: str) -> str:
+    text = text.replace("\\", "\\\\")
+    text = text.replace("'", "\u2019")
+    text = text.replace(":", "\\:")
+    text = text.replace("%", "\\%")
+    return text
+
+
 def _format_num(val: float) -> str:
     s = f"{val:.4f}".rstrip("0").rstrip(".")
     return s if s else "0"
@@ -348,12 +356,14 @@ class FFmpegAdapter(BaseEditorAdapter):
             for c in clips
         )
         num_clips = len(clips)
+        subtitles = plan.get("subtitles") or []
+        assembled_v = "[v_assembled]" if subtitles else "[outv]"
 
         if not has_transitions or num_clips <= 1:
             concat_stream_order = "".join(
                 f"{concat_v_inputs[i]}{concat_a_inputs[i]}" for i in range(num_clips)
             )
-            concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1[outv][outa]"
+            concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1{assembled_v}[outa]"
             filter_parts.append(concat_filter)
         else:
             curr_v = "[v0]"
@@ -368,7 +378,7 @@ class FFmpegAdapter(BaseEditorAdapter):
                 next_dur = float(next_clip["end"]) - float(next_clip["start"])
 
                 is_last = (next_idx == num_clips - 1)
-                out_v = "[outv]" if is_last else f"[xv{next_idx}]"
+                out_v = assembled_v if is_last else f"[xv{next_idx}]"
                 out_a = "[outa]" if is_last else f"[xa{next_idx}]"
 
                 clip_i = clips[i]
@@ -397,6 +407,44 @@ class FFmpegAdapter(BaseEditorAdapter):
 
                 curr_v = out_v
                 curr_a = out_a
+
+        # Burn in subtitles via drawtext if provided
+        if subtitles:
+            v_curr = assembled_v
+            for s_idx, sub in enumerate(subtitles):
+                is_last_sub = (s_idx == len(subtitles) - 1)
+                sub_v_out = "[outv]" if is_last_sub else f"[v_sub_{s_idx}]"
+                style = sub.get("style", {}) if isinstance(sub.get("style"), dict) else {}
+
+                font_size = style.get("font_size", 24)
+                font_color = style.get("font_color", "white")
+                box = style.get("box", True)
+                box_color = style.get("box_color", "black@0.6")
+                pos = style.get("position", "bottom")
+
+                s_start_str = _format_num(float(sub["start"]))
+                s_end_str = _format_num(float(sub["end"]))
+                escaped_text = _escape_drawtext_text(sub["text"])
+
+                d_parts = [
+                    f"text='{escaped_text}'",
+                    f"enable='between(t,{s_start_str},{s_end_str})'",
+                    f"fontsize={font_size}",
+                    f"fontcolor={font_color}",
+                ]
+                if box:
+                    d_parts.extend(["box=1", f"boxcolor={box_color}", "boxborderw=6"])
+
+                if pos == "top":
+                    d_parts.extend(["x=(w-text_w)/2", "y=40"])
+                elif pos == "center":
+                    d_parts.extend(["x=(w-text_w)/2", "y=(h-text_h)/2"])
+                else:  # "bottom"
+                    d_parts.extend(["x=(w-text_w)/2", "y=h-text_h-40"])
+
+                dt_str = ":".join(d_parts)
+                filter_parts.append(f"{v_curr}drawtext={dt_str}{sub_v_out}")
+                v_curr = sub_v_out
 
         full_filter_complex = ";".join(filter_parts)
         cmd.extend(["-filter_complex", full_filter_complex])

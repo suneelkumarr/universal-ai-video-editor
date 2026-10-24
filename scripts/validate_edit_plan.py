@@ -9,7 +9,7 @@ MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_CLIPS = 500
 MAX_DIMENSION = 7680
 MAX_FPS = 120
-ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata"}
+ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata", "subtitles"}
 ALLOWED_OUTPUT_KEYS = {"path", "width", "height", "fps", "preset", "framing"}
 ALLOWED_CLIP_KEYS = {"source", "start", "end", "label", "transition"}
 ALLOWED_TRANSITION_KEYS = {"type", "duration"}
@@ -19,6 +19,10 @@ ALLOWED_TRANSITION_TYPES = {
     "slideup", "slidedown", "slideleft", "slideright",
     "circlecrop", "dissolve",
 }
+
+ALLOWED_SUBTITLE_KEYS = {"start", "end", "text", "style"}
+ALLOWED_SUBTITLE_STYLE_KEYS = {"font_size", "font_color", "box", "box_color", "position"}
+ALLOWED_SUBTITLE_POSITIONS = {"bottom", "center", "top"}
 
 ASPECT_PRESETS = {
     "9:16": (1080, 1920),
@@ -177,6 +181,66 @@ def validate_plan(plan, base_dir=None):
     metadata = plan.get("metadata", {})
     if not isinstance(metadata, dict):
         errors.append("metadata must be an object when provided")
+
+    subtitles = plan.get("subtitles")
+    if subtitles is not None:
+        if not isinstance(subtitles, list):
+            errors.append("subtitles must be an array")
+        elif len(subtitles) > 1000:
+            errors.append("subtitles cannot exceed 1000 entries")
+        else:
+            for s_idx, sub in enumerate(subtitles):
+                s_prefix = f"subtitles[{s_idx}]"
+                if not isinstance(sub, dict):
+                    errors.append(f"{s_prefix} must be an object")
+                    continue
+                extra_sub = sorted(set(sub) - ALLOWED_SUBTITLE_KEYS)
+                if extra_sub:
+                    errors.append(f"{s_prefix} has unknown field(s): " + ", ".join(extra_sub))
+
+                s_start = sub.get("start")
+                s_end = sub.get("end")
+                if not _is_number(s_start) or s_start < 0:
+                    errors.append(f"{s_prefix}.start must be a finite number >= 0")
+                if not _is_number(s_end) or s_end <= 0:
+                    errors.append(f"{s_prefix}.end must be a finite number > 0")
+                if _is_number(s_start) and _is_number(s_end) and s_start >= s_end:
+                    errors.append(f"{s_prefix}.start ({s_start}) must be strictly less than end ({s_end})")
+
+                s_text = sub.get("text")
+                if not isinstance(s_text, str) or not s_text.strip():
+                    errors.append(f"{s_prefix}.text must be a non-empty string")
+                elif len(s_text) > 1000:
+                    errors.append(f"{s_prefix}.text exceeds 1000 characters")
+
+                s_style = sub.get("style")
+                if s_style is not None:
+                    if not isinstance(s_style, dict):
+                        errors.append(f"{s_prefix}.style must be an object")
+                    else:
+                        extra_style = sorted(set(s_style) - ALLOWED_SUBTITLE_STYLE_KEYS)
+                        if extra_style:
+                            errors.append(f"{s_prefix}.style has unknown field(s): " + ", ".join(extra_style))
+
+                        fs = s_style.get("font_size")
+                        if fs is not None and (not _is_number(fs) or fs <= 0 or fs > 200):
+                            errors.append(f"{s_prefix}.style.font_size must be a number between 1 and 200")
+
+                        fc = s_style.get("font_color")
+                        if fc is not None and (not isinstance(fc, str) or len(fc) > 50):
+                            errors.append(f"{s_prefix}.style.font_color must be a string")
+
+                        sb = s_style.get("box")
+                        if sb is not None and not isinstance(sb, bool):
+                            errors.append(f"{s_prefix}.style.box must be a boolean")
+
+                        bc = s_style.get("box_color")
+                        if bc is not None and (not isinstance(bc, str) or len(bc) > 50):
+                            errors.append(f"{s_prefix}.style.box_color must be a string")
+
+                        pos = s_style.get("position")
+                        if pos is not None and (not isinstance(pos, str) or pos not in ALLOWED_SUBTITLE_POSITIONS):
+                            errors.append(f"{s_prefix}.style.position must be one of: {', '.join(sorted(ALLOWED_SUBTITLE_POSITIONS))}")
 
     return {
         "status": "FAIL" if errors else "PASS",
