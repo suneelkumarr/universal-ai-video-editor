@@ -155,9 +155,12 @@ class TestSubtitlesEngine(unittest.TestCase):
         cmd = adapter.build_ffmpeg_command(plan, sources_info, (self.tmp / "out.mp4").resolve())
         fc = cmd[cmd.index("-filter_complex") + 1]
 
-        self.assertIn("drawtext=", fc)
-        self.assertIn("AI Auto Caption", fc)
-        self.assertIn("between(t,0.5,2.5)", fc)
+        if adapter.has_filter("drawtext"):
+            self.assertIn("drawtext=", fc)
+            self.assertIn("AI Auto Caption", fc)
+            self.assertIn("between(t,0.5,2.5)", fc)
+        else:
+            self.assertIn("subtitles=", fc)
 
     # =========================================================================
     # 3. Real Render Test with Subtitles

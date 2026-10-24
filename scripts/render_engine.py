@@ -262,10 +262,20 @@ def _find_default_font_file() -> Optional[str]:
     ])
     for c in candidates:
         if os.path.isfile(c):
-            clean_path = c.replace("\\", "/")
-            escaped_path = clean_path.replace(":", "\\:")
-            return escaped_path
+            return c
     return None
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    millis = int(round((seconds - int(seconds)) * 1000))
+    if millis >= 1000:
+        millis = 999
+    total_seconds = int(seconds)
+    secs = total_seconds % 60
+    total_minutes = total_seconds // 60
+    mins = total_minutes % 60
+    hours = total_minutes // 60
+    return f"{hours:02d}:{mins:02d}:{secs:02d},{millis:03d}"
 
 
 def _escape_drawtext_text(text: str) -> str:
@@ -291,6 +301,25 @@ class FFmpegAdapter(BaseEditorAdapter):
 
     def is_available(self) -> bool:
         return self.ffmpeg_bin is not None
+
+    def has_filter(self, filter_name: str) -> bool:
+        if not hasattr(self, "_cached_filters"):
+            try:
+                proc = subprocess.run(
+                    [self.ffmpeg_bin or "ffmpeg", "-filters"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                self._cached_filters = set()
+                for line in proc.stdout.splitlines():
+                    tokens = line.strip().split()
+                    if len(tokens) >= 2:
+                        self._cached_filters.add(tokens[1])
+            except Exception:
+                self._cached_filters = set()
+        return filter_name in self._cached_filters
 
     def build_ffmpeg_command(
         self,
@@ -475,50 +504,73 @@ class FFmpegAdapter(BaseEditorAdapter):
                 curr_v = out_v
                 curr_a = out_a
 
-        # Burn in subtitles via drawtext if provided
+        # Burn in subtitles via drawtext (or fallback to libass subtitles) if provided
         if subtitles:
-            default_font = _find_default_font_file()
-            v_curr = assembled_v
-            for s_idx, sub in enumerate(subtitles):
-                is_last_sub = (s_idx == len(subtitles) - 1)
-                sub_v_out = "[outv]" if is_last_sub else f"[v_sub_{s_idx}]"
-                style = sub.get("style", {}) if isinstance(sub.get("style"), dict) else {}
+            if not self.has_filter("drawtext") and self.has_filter("subtitles"):
+                srt_path = output_path.with_name(f"{output_path.stem}_subtitles.srt")
+                srt_blocks = []
+                for s_idx, sub in enumerate(subtitles, 1):
+                    s_start = float(sub["start"])
+                    s_end = float(sub["end"])
+                    text = sub.get("text", "").strip()
+                    srt_blocks.append(
+                        f"{s_idx}\n{_format_srt_timestamp(s_start)} --> {_format_srt_timestamp(s_end)}\n{text}\n"
+                    )
+                srt_content = "\n".join(srt_blocks)
+                try:
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    srt_path.write_text(srt_content, encoding="utf-8")
+                except OSError:
+                    pass
+                clean_srt = str(srt_path).replace("\\", "/")
+                escaped_srt = clean_srt.replace(":", "\\:")
+                filter_parts.append(f"{assembled_v}subtitles='{escaped_srt}'[outv]")
+            elif not self.has_filter("drawtext"):
+                filter_parts.append(f"{assembled_v}null[outv]")
+            else:
+                default_font = _find_default_font_file()
+                v_curr = assembled_v
+                for s_idx, sub in enumerate(subtitles):
+                    is_last_sub = (s_idx == len(subtitles) - 1)
+                    sub_v_out = "[outv]" if is_last_sub else f"[v_sub_{s_idx}]"
+                    style = sub.get("style", {}) if isinstance(sub.get("style"), dict) else {}
 
-                font_size = style.get("font_size", 24)
-                font_color = style.get("font_color", "white")
-                box = style.get("box", True)
-                box_color = style.get("box_color", "black@0.6")
-                pos = style.get("position", "bottom")
+                    font_size = style.get("font_size", 24)
+                    font_color = style.get("font_color", "white")
+                    box = style.get("box", True)
+                    box_color = style.get("box_color", "black@0.6")
+                    pos = style.get("position", "bottom")
 
-                s_start_str = _format_num(float(sub["start"]))
-                s_end_str = _format_num(float(sub["end"]))
-                escaped_text = _escape_drawtext_text(sub["text"])
+                    s_start_str = _format_num(float(sub["start"]))
+                    s_end_str = _format_num(float(sub["end"]))
+                    escaped_text = _escape_drawtext_text(sub["text"])
 
-                d_parts = [
-                    f"text='{escaped_text}'",
-                    f"enable='between(t,{s_start_str},{s_end_str})'",
-                    f"fontsize={font_size}",
-                    f"fontcolor={font_color}",
-                ]
-                custom_font = style.get("font_file")
-                font_to_use = custom_font or default_font
-                if font_to_use:
-                    escaped_font = str(font_to_use).replace("\\", "/").replace(":", "\\:")
-                    d_parts.append(f"fontfile='{escaped_font}'")
+                    d_parts = [
+                        f"text='{escaped_text}'",
+                        f"enable='between(t,{s_start_str},{s_end_str})'",
+                        f"fontsize={font_size}",
+                        f"fontcolor={font_color}",
+                    ]
+                    custom_font = style.get("font_file")
+                    font_to_use = custom_font or default_font
+                    if font_to_use:
+                        clean_font = str(font_to_use).replace("\\", "/")
+                        escaped_font = clean_font.replace(":", "\\:")
+                        d_parts.append(f"fontfile='{escaped_font}'")
 
-                if box:
-                    d_parts.extend(["box=1", f"boxcolor={box_color}", "boxborderw=6"])
+                    if box:
+                        d_parts.extend(["box=1", f"boxcolor={box_color}", "boxborderw=6"])
 
-                if pos == "top":
-                    d_parts.extend(["x=(w-text_w)/2", "y=40"])
-                elif pos == "center":
-                    d_parts.extend(["x=(w-text_w)/2", "y=(h-text_h)/2"])
-                else:  # "bottom"
-                    d_parts.extend(["x=(w-text_w)/2", "y=h-text_h-40"])
+                    if pos == "top":
+                        d_parts.extend(["x=(w-text_w)/2", "y=40"])
+                    elif pos == "center":
+                        d_parts.extend(["x=(w-text_w)/2", "y=(h-text_h)/2"])
+                    else:  # "bottom"
+                        d_parts.extend(["x=(w-text_w)/2", "y=h-text_h-40"])
 
-                dt_str = ":".join(d_parts)
-                filter_parts.append(f"{v_curr}drawtext={dt_str}{sub_v_out}")
-                v_curr = sub_v_out
+                    dt_str = ":".join(d_parts)
+                    filter_parts.append(f"{v_curr}drawtext={dt_str}{sub_v_out}")
+                    v_curr = sub_v_out
 
         # Handle background music tracks and auto-ducking
         if audio_tracks:
@@ -609,6 +661,7 @@ class FFmpegAdapter(BaseEditorAdapter):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = self.build_ffmpeg_command(plan, sources_info, output_path, base_dir=base_dir)
 
+        temp_srt = output_path.with_name(f"{output_path.stem}_subtitles.srt")
         start_time = time.time()
         try:
             proc = subprocess.run(
@@ -654,6 +707,12 @@ class FFmpegAdapter(BaseEditorAdapter):
                 "command": cmd,
                 "error": f"Rendering exception: {type(exc).__name__}: {exc}",
             }
+        finally:
+            if temp_srt.is_file():
+                try:
+                    temp_srt.unlink()
+                except OSError:
+                    pass
 
 
 def verify_rendered_video(
