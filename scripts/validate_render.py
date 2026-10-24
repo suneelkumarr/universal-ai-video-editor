@@ -55,7 +55,7 @@ def main():
             "result": "PASS" if video and video.get("height") == expected_height else "FAIL"
         })
     if expected_duration is not None:
-        tolerance = max(1.0, expected_duration * 0.02)
+        tolerance = round(max(0.1, expected_duration * 0.02), 4)
         checks.append({
             "name": "duration", "expected": expected_duration, "actual": duration,
             "tolerance": tolerance,

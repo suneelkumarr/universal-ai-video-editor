@@ -267,22 +267,27 @@ class FFmpegAdapter(BaseEditorAdapter):
                 str(resolved_source),
             ])
 
-            # Video conforming filter: scale to fit within target bounding box, pad to target_w x target_h, set fps & sar
+            dur_str = f"{duration:.4f}".rstrip("0").rstrip(".")
+
+            # Video conforming filter: scale, pad, set fps & sar, and frame-accurate trim
             v_filter = (
                 f"[{idx}:v]fps={target_fps},"
                 f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,"
                 f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2,"
-                f"setsar=1[v{idx}]"
+                f"setsar=1,"
+                f"trim=duration={dur_str},setpts=PTS-STARTPTS[v{idx}]"
             )
             filter_parts.append(v_filter)
             concat_v_inputs.append(f"[v{idx}]")
 
-            # Audio conforming filter
+            # Audio conforming filter: resample to stereo 48k, and frame-accurate atrim
             if info.get("has_audio", True):
-                a_filter = f"[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a{idx}]"
+                a_filter = (
+                    f"[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,"
+                    f"atrim=duration={dur_str},asetpts=PTS-STARTPTS[a{idx}]"
+                )
             else:
                 # Synthesize silence of exact clip duration
-                dur_str = f"{duration:.4f}".rstrip("0").rstrip(".")
                 a_filter = f"anullsrc=r=48000:cl=stereo,atrim=duration={dur_str},asetpts=PTS-STARTPTS[a{idx}]"
 
             filter_parts.append(a_filter)
@@ -705,7 +710,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument(
         "--timeout",
-        type=float,
         default=300.0,
         help="Render timeout in seconds (default 300)",
     )
@@ -736,12 +740,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 1
 
+    timeout_val = args.timeout
+    if isinstance(timeout_val, str):
+        try:
+            timeout_val = float(timeout_val)
+        except (ValueError, OverflowError):
+            pass
+
     report = render_edit_plan(
         plan=plan_data,
         base_dir=plan_path.parent,
         custom_output=Path(args.output) if args.output else None,
         dry_run=args.dry_run,
-        timeout_seconds=args.timeout,
+        timeout_seconds=timeout_val,
     )
 
     print(json.dumps(report, indent=2))
