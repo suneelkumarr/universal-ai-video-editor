@@ -593,19 +593,7 @@ def render_edit_plan(
             "plan_validation": plan_validation,
         }
 
-    # Step 2: Inspect sources
-    passed_inspection, inspect_errors, sources_info = inspect_source_clips(
-        plan, base_dir=root
-    )
-    if not passed_inspection:
-        return {
-            "status": "FAIL",
-            "stage": "source_inspection",
-            "errors": inspect_errors,
-            "sources_info": sources_info,
-        }
-
-    # Resolve output path and protect every input source from accidental overwrite.
+    # Step 2: Resolve output path and protect every input source from accidental overwrite early.
     if custom_output:
         out_path = Path(custom_output).expanduser().resolve(strict=False)
     else:
@@ -632,6 +620,18 @@ def render_edit_plan(
                 "stage": "output_validation",
                 "errors": [f"Output path would overwrite source clip at clips[{index}]; choose a different output path"],
             }
+
+    # Step 3: Inspect sources
+    passed_inspection, inspect_errors, sources_info = inspect_source_clips(
+        plan, base_dir=root
+    )
+    if not passed_inspection:
+        return {
+            "status": "FAIL",
+            "stage": "source_inspection",
+            "errors": inspect_errors,
+            "sources_info": sources_info,
+        }
 
     # Calculate expected timeline duration
     expected_duration = sum(

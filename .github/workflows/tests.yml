@@ -28,10 +28,18 @@ jobs:
           sudo apt-get install -y ffmpeg
       - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
-        run: brew install ffmpeg
+        run: |
+          brew install ffmpeg
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
-        run: choco install ffmpeg --no-progress -y
+        run: |
+          choco install ffmpeg --no-progress -y
+          "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Verify FFmpeg availability
+        run: |
+          python -c "import shutil; print('ffmpeg:', shutil.which('ffmpeg')); print('ffprobe:', shutil.which('ffprobe'))"
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
