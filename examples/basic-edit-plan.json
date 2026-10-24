@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "output": {
+    "path": "renders/final.mp4",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "clips": [
+    {
+      "source": "media/clip-a.mp4",
+      "start": 0,
+      "end": 4.5,
+      "label": "Opening shot"
+    },
+    {
+      "source": "media/clip-b.mp4",
+      "start": 1.25,
+      "end": 6,
+      "label": "Main action"
+    }
+  ],
+  "metadata": {
+    "purpose": "Example only; replace source paths and timestamps with real media"
+  }
+}
