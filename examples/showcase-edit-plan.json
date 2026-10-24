@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "output": {
+    "path": "renders/showcase_reel.mp4",
+    "preset": "16:9",
+    "framing": "blur_fill",
+    "fps": 30
+  },
+  "clips": [
+    {
+      "source": "../WhatsApp Video 2026-10-16 at 21.08.30.mp4",
+      "start": 2.0,
+      "end": 6.0,
+      "label": "Scene 1: Introduction",
+      "transition": {
+        "type": "fade",
+        "duration": 0.5
+      }
+    },
+    {
+      "source": "../WhatsApp Video 2026-10-16 at 21.08.30.mp4",
+      "start": 12.0,
+      "end": 16.0,
+      "label": "Scene 2: Main Highlight",
+      "transition": {
+        "type": "wipeleft",
+        "duration": 0.5
+      }
+    },
+    {
+      "source": "../WhatsApp Video 2026-10-16 at 21.08.30.mp4",
+      "start": 25.0,
+      "end": 28.5,
+      "label": "Scene 3: Outro"
+    }
+  ],
+  "subtitles": [
+    {
+      "start": 0.5,
+      "end": 3.0,
+      "text": "Universal AI Video Editor",
+      "style": {
+        "font_size": 36,
+        "font_color": "white",
+        "box": true,
+        "box_color": "black@0.7",
+        "position": "top"
+      }
+    },
+    {
+      "start": 4.0,
+      "end": 7.0,
+      "text": "Smooth Cinematic Transitions & Auto-Framing",
+      "style": {
+        "font_size": 28,
+        "font_color": "yellow",
+        "box": true,
+        "box_color": "black@0.6",
+        "position": "bottom"
+      }
+    },
+    {
+      "start": 7.5,
+      "end": 10.0,
+      "text": "100% Reliable Render Engine",
+      "style": {
+        "font_size": 30,
+        "font_color": "white",
+        "box": true,
+        "box_color": "black@0.6",
+        "position": "bottom"
+      }
+    }
+  ],
+  "metadata": {
+    "title": "Universal AI Video Editor Showcase",
+    "description": "Showcases 16:9 blur_fill smart framing, chained transitions (fade + wipeleft), and styled captions burn-in."
+  }
+}
