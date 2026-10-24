@@ -21,6 +21,7 @@
 | [`SKILL.md`](SKILL.md) | Main agent skill and editing rules |
 | [`scripts/discover_environment.py`](scripts/discover_environment.py) | Detect OS, common editing tools, Python media libraries, and disk space without changing the system |
 | [`scripts/inspect_media.py`](scripts/inspect_media.py) | Media metadata inspection via `ffprobe` |
+| [`scripts/auto_edit.py`](scripts/auto_edit.py) | AI Auto-Cutter: automated silence detection, dead-pause removal, and highlight reel generation |
 | [`scripts/render_engine.py`](scripts/render_engine.py) | Production video rendering engine with transitions, framing, subtitles, audio mixing, and QA verification |
 | [`scripts/validate_render.py`](scripts/validate_render.py) | Render metadata and decode validation via `ffprobe` / `ffmpeg` |
 | [`scripts/validate_edit_plan.py`](scripts/validate_edit_plan.py) | Fail-closed validator for edit plans, transitions, framing, subtitles, and audio tracks |
@@ -28,11 +29,16 @@
 | [`examples/sample-render-plan.json`](examples/sample-render-plan.json) | Ready-to-render example manifest linked to workspace sample media |
 | [`examples/showcase-edit-plan.json`](examples/showcase-edit-plan.json) | Complete showcase manifest (16:9 blur_fill, fade/wipe transitions, and styled captions) |
 | [`config/tool-adapters.json`](config/tool-adapters.json) | Tool-discovery configuration template |
-| [`tests/`](tests/) | Unit, integration, E2E, quality, and regression test suites (79 tests) |
+| [`tests/`](tests/) | Unit, integration, E2E, quality, and regression test suites (84 tests) |
 | [`TESTING.md`](TESTING.md) | Mandatory TDD, integration, security, load-test and release-gate policy |
 
 ## Features & Capabilities
 
+- **AI Auto-Cutter & Pause Removal (`scripts/auto_edit.py`)**:
+  - Automatically analyzes source footage audio to detect and excise dead silences and pauses (`silencedetect`).
+  - Merges active speech segments with natural boundary padding to avoid cutting off speech.
+  - Automatically formats the cuts into a valid edit plan with target presets, smart framing, and smooth transitions.
+  - One-click end-to-end rendering with `--render`.
 - **Aspect Ratio Presets & Smart Framing**:
   - Presets: `9:16` (TikTok/Reels/Shorts), `16:9` (YouTube/Landscape), `1:1` (Square), `4:5` (Social Portrait).
   - Framing Modes: `blur_fill` (cinematic blurred background padding), `crop_fill` (centered crop), `letterbox` (standard padded bars).
@@ -52,13 +58,17 @@
 1. Install Python 3.10+ and [FFmpeg](https://ffmpeg.org/).
 2. Discover local capabilities: `python scripts/discover_environment.py --pretty`
 3. Inspect a video: `python scripts/inspect_media.py input.mp4`
-4. Validate an edit plan: `python scripts/validate_edit_plan.py examples/showcase-edit-plan.json`
-5. Render a verified showcase video:
+4. Automatically cut pauses and generate an edit plan:
    ```bash
-   python scripts/render_engine.py examples/showcase-edit-plan.json
+   python scripts/auto_edit.py input.mp4 --preset 9:16 --framing blur_fill --max-duration 30 --output-plan plan.json
    ```
-6. Check rendered file directly: `python scripts/validate_render.py examples/renders/showcase_reel.mp4 1920 1080 10.5`
-7. Run all 79 tests: `python scripts/run_tests_with_summary.py`
+5. Validate an edit plan: `python scripts/validate_edit_plan.py plan.json`
+6. Render the output video:
+   ```bash
+   python scripts/render_engine.py plan.json
+   ```
+   *(Or one-command auto-cut and render: `python scripts/auto_edit.py input.mp4 --preset 9:16 --render`)*
+7. Run all 84 tests: `python scripts/run_tests_with_summary.py`
 
 ## Platform compatibility
 
