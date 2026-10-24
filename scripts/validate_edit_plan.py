@@ -9,7 +9,7 @@ MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_CLIPS = 500
 MAX_DIMENSION = 7680
 MAX_FPS = 120
-ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata", "subtitles"}
+ALLOWED_PLAN_KEYS = {"schema_version", "output", "clips", "metadata", "subtitles", "audio_tracks"}
 ALLOWED_OUTPUT_KEYS = {"path", "width", "height", "fps", "preset", "framing"}
 ALLOWED_CLIP_KEYS = {"source", "start", "end", "label", "transition"}
 ALLOWED_TRANSITION_KEYS = {"type", "duration"}
@@ -23,6 +23,9 @@ ALLOWED_TRANSITION_TYPES = {
 ALLOWED_SUBTITLE_KEYS = {"start", "end", "text", "style"}
 ALLOWED_SUBTITLE_STYLE_KEYS = {"font_size", "font_color", "box", "box_color", "position"}
 ALLOWED_SUBTITLE_POSITIONS = {"bottom", "center", "top"}
+
+ALLOWED_AUDIO_TRACK_KEYS = {"source", "start", "volume", "loop", "ducking"}
+ALLOWED_DUCKING_KEYS = {"enabled", "reduction_db", "threshold", "ratio", "attack_ms", "release_ms"}
 
 ASPECT_PRESETS = {
     "9:16": (1080, 1920),
@@ -241,6 +244,62 @@ def validate_plan(plan, base_dir=None):
                         pos = s_style.get("position")
                         if pos is not None and (not isinstance(pos, str) or pos not in ALLOWED_SUBTITLE_POSITIONS):
                             errors.append(f"{s_prefix}.style.position must be one of: {', '.join(sorted(ALLOWED_SUBTITLE_POSITIONS))}")
+
+    audio_tracks = plan.get("audio_tracks")
+    if audio_tracks is not None:
+        if not isinstance(audio_tracks, list):
+            errors.append("audio_tracks must be an array")
+        elif len(audio_tracks) > 50:
+            errors.append("audio_tracks cannot exceed 50 entries")
+        else:
+            for a_idx, track in enumerate(audio_tracks):
+                a_prefix = f"audio_tracks[{a_idx}]"
+                if not isinstance(track, dict):
+                    errors.append(f"{a_prefix} must be an object")
+                    continue
+                extra_audio = sorted(set(track) - ALLOWED_AUDIO_TRACK_KEYS)
+                if extra_audio:
+                    errors.append(f"{a_prefix} has unknown field(s): " + ", ".join(extra_audio))
+
+                a_source = track.get("source")
+                if not isinstance(a_source, str) or not a_source.strip():
+                    errors.append(f"{a_prefix}.source must be a non-empty string")
+                else:
+                    try:
+                        resolved_a_source = _canonical_path(a_source, root)
+                        if resolved_output is not None and resolved_output == resolved_a_source:
+                            errors.append(f"{a_prefix}.source cannot alias output.path")
+                    except Exception:
+                        pass
+
+                a_start = track.get("start")
+                if a_start is not None and (not _is_number(a_start) or a_start < 0):
+                    errors.append(f"{a_prefix}.start must be a finite number >= 0")
+
+                a_vol = track.get("volume")
+                if a_vol is not None and (not _is_number(a_vol) or a_vol < 0 or a_vol > 5.0):
+                    errors.append(f"{a_prefix}.volume must be a finite number between 0.0 and 5.0")
+
+                a_loop = track.get("loop")
+                if a_loop is not None and not isinstance(a_loop, bool):
+                    errors.append(f"{a_prefix}.loop must be a boolean")
+
+                ducking = track.get("ducking")
+                if ducking is not None:
+                    if not isinstance(ducking, dict):
+                        errors.append(f"{a_prefix}.ducking must be an object")
+                    else:
+                        extra_duck = sorted(set(ducking) - ALLOWED_DUCKING_KEYS)
+                        if extra_duck:
+                            errors.append(f"{a_prefix}.ducking has unknown field(s): " + ", ".join(extra_duck))
+
+                        d_en = ducking.get("enabled")
+                        if d_en is not None and not isinstance(d_en, bool):
+                            errors.append(f"{a_prefix}.ducking.enabled must be a boolean")
+
+                        d_red = ducking.get("reduction_db")
+                        if d_red is not None and (not _is_number(d_red) or d_red < 0 or d_red > 60):
+                            errors.append(f"{a_prefix}.ducking.reduction_db must be a number between 0 and 60")
 
     return {
         "status": "FAIL" if errors else "PASS",

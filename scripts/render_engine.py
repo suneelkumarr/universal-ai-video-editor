@@ -188,6 +188,27 @@ def inspect_source_clips(
                     f"clips[{idx}].end ({end}s) exceeds source duration ({duration:.2f}s)"
                 )
 
+    audio_tracks = plan.get("audio_tracks", [])
+    if isinstance(audio_tracks, list):
+        for a_idx, track in enumerate(audio_tracks):
+            if not isinstance(track, dict):
+                continue
+            source_raw = track.get("source")
+            if not source_raw:
+                errors.append(f"audio_tracks[{a_idx}] has empty source path")
+                continue
+            resolved_source = _canonical_path(source_raw, root)
+            source_key = str(resolved_source)
+            if source_key not in sources_info:
+                info = inspect_media_file(resolved_source)
+                sources_info[source_key] = info
+                if not info["exists"]:
+                    errors.append(f"audio_tracks[{a_idx}].source not found: {source_raw}")
+                elif info.get("error"):
+                    errors.append(f"audio_tracks[{a_idx}].source invalid: {info['error']}")
+                elif not info.get("has_audio"):
+                    errors.append(f"audio_tracks[{a_idx}].source has no audio stream: {source_raw}")
+
     return len(errors) == 0, errors, sources_info
 
 
@@ -350,6 +371,14 @@ class FFmpegAdapter(BaseEditorAdapter):
             filter_parts.append(a_filter)
             concat_a_inputs.append(f"[a{idx}]")
 
+        # Add background audio track inputs
+        audio_tracks = plan.get("audio_tracks") or []
+        for t_idx, track in enumerate(audio_tracks):
+            resolved_a_source = _canonical_path(track["source"], root)
+            if track.get("loop", False):
+                cmd.extend(["-stream_loop", "-1"])
+            cmd.extend(["-i", str(resolved_a_source)])
+
         # Handle stream assembly: transitions (xfade / acrossfade) or simple concat
         has_transitions = any(
             isinstance(c.get("transition"), dict) and c["transition"].get("duration")
@@ -358,12 +387,13 @@ class FFmpegAdapter(BaseEditorAdapter):
         num_clips = len(clips)
         subtitles = plan.get("subtitles") or []
         assembled_v = "[v_assembled]" if subtitles else "[outv]"
+        assembled_a = "[a_dialogue]" if audio_tracks else "[outa]"
 
         if not has_transitions or num_clips <= 1:
             concat_stream_order = "".join(
                 f"{concat_v_inputs[i]}{concat_a_inputs[i]}" for i in range(num_clips)
             )
-            concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1{assembled_v}[outa]"
+            concat_filter = f"{concat_stream_order}concat=n={num_clips}:v=1:a=1{assembled_v}{assembled_a}"
             filter_parts.append(concat_filter)
         else:
             curr_v = "[v0]"
@@ -379,7 +409,7 @@ class FFmpegAdapter(BaseEditorAdapter):
 
                 is_last = (next_idx == num_clips - 1)
                 out_v = assembled_v if is_last else f"[xv{next_idx}]"
-                out_a = "[outa]" if is_last else f"[xa{next_idx}]"
+                out_a = assembled_a if is_last else f"[xa{next_idx}]"
 
                 clip_i = clips[i]
                 transition = clip_i.get("transition")
@@ -445,6 +475,50 @@ class FFmpegAdapter(BaseEditorAdapter):
                 dt_str = ":".join(d_parts)
                 filter_parts.append(f"{v_curr}drawtext={dt_str}{sub_v_out}")
                 v_curr = sub_v_out
+
+        # Handle background music tracks and auto-ducking
+        if audio_tracks:
+            ducked_indices = [
+                t_idx for t_idx, track in enumerate(audio_tracks)
+                if isinstance(track.get("ducking"), dict) and track["ducking"].get("enabled")
+            ]
+
+            if ducked_indices:
+                split_count = len(ducked_indices) + 1
+                split_labels = [f"[a_dia_duck_{t_idx}]" for t_idx in ducked_indices] + ["[a_dia_mix]"]
+                filter_parts.append(f"{assembled_a}asplit={split_count}{''.join(split_labels)}")
+                main_mix_dialogue = "[a_dia_mix]"
+            else:
+                main_mix_dialogue = assembled_a
+
+            bgm_processed_labels = []
+            for t_idx, track in enumerate(audio_tracks):
+                track_input_idx = num_clips + t_idx
+                vol = track.get("volume", 1.0)
+                vol_str = _format_num(float(vol))
+                filter_parts.append(
+                    f"[{track_input_idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={vol_str}[bgm_raw_{t_idx}]"
+                )
+
+                if t_idx in ducked_indices:
+                    ducking = track.get("ducking") or {}
+                    d_thresh = ducking.get("threshold", 0.05)
+                    d_ratio = ducking.get("ratio", 4.0)
+                    d_attack = ducking.get("attack_ms", 50)
+                    d_release = ducking.get("release_ms", 300)
+                    filter_parts.append(
+                        f"[bgm_raw_{t_idx}][a_dia_duck_{t_idx}]sidechaincompress=threshold={d_thresh}:ratio={d_ratio}:attack={d_attack}:release={d_release}[bgm_{t_idx}]"
+                    )
+                else:
+                    filter_parts.append(f"[bgm_raw_{t_idx}]anull[bgm_{t_idx}]")
+
+                bgm_processed_labels.append(f"[bgm_{t_idx}]")
+
+            all_audio_inputs = f"{main_mix_dialogue}" + "".join(bgm_processed_labels)
+            total_audio_inputs = 1 + len(audio_tracks)
+            filter_parts.append(
+                f"{all_audio_inputs}amix=inputs={total_audio_inputs}:duration=first:dropout_transition=2[outa]"
+            )
 
         full_filter_complex = ";".join(filter_parts)
         cmd.extend(["-filter_complex", full_filter_complex])
@@ -765,6 +839,22 @@ def render_edit_plan(
                 "stage": "output_validation",
                 "errors": [f"Output path would overwrite source clip at clips[{index}]; choose a different output path"],
             }
+
+    for a_index, track in enumerate(plan.get("audio_tracks", [])):
+        if isinstance(track, dict) and track.get("source"):
+            source_path = _canonical_path(track["source"], root)
+            aliases_source = out_path == source_path
+            if not aliases_source and out_path.exists() and source_path.exists():
+                try:
+                    aliases_source = os.path.samefile(out_path, source_path)
+                except OSError:
+                    aliases_source = False
+            if aliases_source:
+                return {
+                    "status": "FAIL",
+                    "stage": "output_validation",
+                    "errors": [f"Output path would overwrite audio track at audio_tracks[{a_index}]; choose a different output path"],
+                }
 
     # Step 3: Inspect sources
     passed_inspection, inspect_errors, sources_info = inspect_source_clips(
