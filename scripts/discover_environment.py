@@ -17,9 +17,6 @@ COMMANDS = {
     "git": ["git", "--version"],
     "python": [sys.executable, "--version"],
     "blender": ["blender", "--version"],
-    "resolve": ["resolve", "--version"],
-    "premiere": ["premiere", "--version"],
-    "audacity": ["audacity", "--version"],
 }
 
 
@@ -46,6 +43,31 @@ def run_version(command: list[str], timeout: float = 3.0) -> dict[str, Any]:
             "status": "detected_unverified", "executable": executable,
             "version": None, "note": type(exc).__name__
         }
+
+
+
+# Detect GUI editors by path only. Never launch a GUI application just to inspect it.
+GUI_EDITORS = {
+    "davinci_resolve": ["resolve", "Resolve"],
+    "premiere_pro": ["premiere", "Adobe Premiere Pro"],
+    "audacity": ["audacity", "Audacity"],
+}
+
+
+def detect_gui_editors() -> dict[str, dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
+    for name, candidates in GUI_EDITORS.items():
+        executable = None
+        for candidate in candidates:
+            executable = shutil.which(candidate)
+            if executable:
+                break
+        found[name] = {
+            "status": "detected_unverified" if executable else "unavailable",
+            "executable": executable,
+            "note": "Detected by path only; not launched or tested.",
+        }
+    return found
 
 
 def runtime_kind() -> str:
@@ -89,6 +111,7 @@ def discover() -> dict[str, Any]:
         },
         "resources": {"disk": disk_info()},
         "tools": tools,
+        "gui_editors": detect_gui_editors(),
         "python_modules": modules,
         "limits": {
             "network_access": "not_tested", "gpu": "not_tested",
