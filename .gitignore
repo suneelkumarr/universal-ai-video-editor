@@ -6,7 +6,6 @@ __pycache__/
 !.env.example
 .DS_Store
 Thumbs.db
-*.mp4
 *.mov
 *.mkv
 *.wav
